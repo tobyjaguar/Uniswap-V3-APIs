@@ -1,20 +1,18 @@
-import sys
-import os
+# import sys
+# import os
 
-# Add the parent directory to the Python path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# # Add the parent directory to the Python path
+# sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from config import DATABASE_URL
+import asyncio
+from database import init_db
+from scripts.load_static_data import load_static_data
 
-Base = declarative_base()
 
-def reset_database():
-    engine = create_engine(DATABASE_URL)
-    Base.metadata.drop_all(engine)
-    Base.metadata.create_all(engine)
+async def reset_database():
+    await init_db()
+    await load_static_data()
+    print("Database has been reset.")
 
 if __name__ == "__main__":
-    reset_database()
-    print("Database has been reset.")
+    asyncio.run(reset_database())

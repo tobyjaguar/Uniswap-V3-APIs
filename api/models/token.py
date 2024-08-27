@@ -1,13 +1,16 @@
-from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
-from typing import List
+from sqlalchemy import Column, Integer, String, Float
+from database import Base
 
-from models.token import Token
-from main import get_db
 
-router = APIRouter()
+class Token(Base):
+    __tablename__ = 'tokens'
 
-@router.get("/tokens", response_model=List[dict])
-async def read_tokens(db: Session = Depends(get_db)):
-    tokens = db.query(Token).all()
-    return [{"symbol": token.symbol, "name": token.name, "address": token.address} for token in tokens]
+    id = Column(Integer, primary_key=True, index=True)
+    address = Column(String, unique=True, index=True)
+    symbol = Column(String)
+    name = Column(String)
+    decimals = Column(Integer)
+    total_supply = Column(Float)
+
+    def __repr__(self):
+        return f"<Token(symbol='{self.symbol}', name='{self.name}')>"

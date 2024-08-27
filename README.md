@@ -30,8 +30,20 @@ The response object from the API endpoint is structured as a 3D array with the f
 ]
 ```
 
-### Running
+### Commands
+
+quit uvicorn:
+
+`CTRL-c`
 
 Start venv with:
 
 `source .venv/bin/activate`
+
+Docker Compose:
+
+`docker compose build`
+
+`docker compose up`
+
+`docker compose down`
