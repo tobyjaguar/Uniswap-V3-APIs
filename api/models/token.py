@@ -10,7 +10,8 @@ class Token(Base):
     symbol = Column(String)
     name = Column(String)
     decimals = Column(Integer)
-    total_supply = Column(Float)
+    total_supply = Column(String)
+    volumeUSD = Column(String)
 
     def __repr__(self):
         return f"<Token(symbol='{self.symbol}', name='{self.name}')>"
