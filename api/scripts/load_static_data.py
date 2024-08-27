@@ -1,7 +1,6 @@
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from models.token import Token
-from database import AsyncSessionLocal
+from services.database import AsyncSessionLocal
 
 async def load_static_data():
     async with AsyncSessionLocal() as session:

@@ -4,6 +4,9 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
+# Environment
+ENVIRONMENT = os.getenv('ENVIRONMENT', 'development')
+
 # Database configuration
 DB_USER = os.getenv('POSTGRES_USER')
 DB_PASSWORD = os.getenv('POSTGRES_PASSWORD')
@@ -18,9 +21,10 @@ DATABASE_URL = f'postgresql+asyncpg://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT
 # API keys
 GRAPH_API_KEY = os.getenv('GRAPH_API_KEY')
 
-# Environment
-ENVIRONMENT = os.getenv('ENVIRONMENT', 'development')
-
 # Uniswap Subgraph URL
 SUBGRAPH_ID = os.getenv('SUBGRAPH_ID')
 UNISWAP_SUBGRAPH_URL = f'https://gateway.thegraph.com/api/{GRAPH_API_KEY}/subgraphs/id/{SUBGRAPH_ID}'
+
+# Token addresses
+TOKEN_ADDRESSES = os.getenv('TOKEN_ADDRESSES').split(',')
+TOKEN_ADDRESS_ARRAY = [addr.strip() for addr in TOKEN_ADDRESSES if addr.strip()]    

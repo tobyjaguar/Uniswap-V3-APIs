@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 
 from main import app
-from database import Base
+from services.database import Base
 from config import DATABASE_URL
 
 # Test database URL
