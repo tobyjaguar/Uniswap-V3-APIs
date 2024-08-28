@@ -12,7 +12,7 @@ class Token(Base):
     name = Column(String(100), nullable=False)
     decimals = Column(Integer, nullable=False)
     total_supply = Column(String)
-    volumeUSD = Column(String)
+    volume_usd = Column(String)
 
     # relationship with PriceData for the index
     price_data = relationship("PriceData", back_populates="token")

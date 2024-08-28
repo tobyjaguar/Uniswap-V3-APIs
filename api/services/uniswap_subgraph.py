@@ -2,9 +2,9 @@ import aiohttp
 import asyncio
 import json
 from datetime import datetime, timedelta
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import insert, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from models.token import Token
 from models.chart_data import PriceData
 from config import UNISWAP_SUBGRAPH_URL
@@ -107,7 +107,7 @@ class UniswapSubgraphService:
             'symbol': token_info['symbol'],
             'total_supply': token_info['totalSupply'],
             'volume_usd': token_info['volumeUSD'],
-            'decimals': token_info['decimals']
+            'decimals': int(token_info['decimals'])
         }
 
         if token_address:
@@ -177,21 +177,43 @@ class UniswapSubgraphService:
             await self.update_token_info(token.id)
             await self.update_price_data(token.id)
 
+        """
+            This function was refactored a couple times in an attempt to make it more efficient.
+            The original implementation was to fetch all tokens from the subgraph, 
+            insert each token into the database, and then query each inserted token record,
+            get the token id, and then fetch/insert historical price data. One refactor was to
+            bulk insert all tokens, save their generated ids, map the token address to this id,
+            and then use the postgres record id for the price updating. Further optimization
+            could be explored, but inserted the price data does not seem to be the goal of the
+            exercise, but to serve price data for charting UIs.
+        """
     async def fetch_and_store_data(self, address_array):
-        # Fetch token info
-        tokens = await self.fetch_tokens(address_array)
-
-        for token in tokens:
-            await self.db_session.execute(
-                insert(Token).
-                values(address=token['id'], **token)
-            )
-
+        # Fetch token info from subgraph
+        subgraph_tokens = await self.fetch_tokens(address_array)
+        # Prepare token data for bulk insersion
+        formatted_tokens = [self.format_token_data(token, token['id']) for token in subgraph_tokens]
+        # Execute bulk insert and save generated ids
+        insert_stmt = pg_insert(Token).values(formatted_tokens)
+        # Upsert on conflict if token address already exists
+        # Update all fields except for the id
+        insert_stmt = insert_stmt.on_conflict_do_update(
+            index_elements=['address'],
+            set_={c.key: c for c in insert_stmt.excluded if c.key != 'id'}
+        )
+        # Return the id and address of the inserted tokens
+        insert_stmt = insert_stmt.returning(Token.id, Token.address)
+        # Execute the insert statement
+        result = await self.db_session.execute(insert_stmt)
+        # Keep track of inserted tokens for generated ids
+        inserted_tokens = result.fetchall()
+        # commit only once on bulk insert
         await self.db_session.commit()
-
-        # Fetch price data
-        for token in tokens:
-            token_id = await self.get_token_id(token['id'])
+        # Map token address to token id
+        token_id_map = {token.address: token.id for token in inserted_tokens}
+        # For each token, fetch and insert price data
+        # Use the subgraph token id to get the postgres token record id
+        for token in subgraph_tokens:
+            token_id = token_id_map[token['id']] # token address from the subgraph response
             await self.update_price_data(token_id)
 
     async def update_chart_data(self):
