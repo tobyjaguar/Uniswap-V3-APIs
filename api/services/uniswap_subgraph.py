@@ -1,3 +1,4 @@
+import logging
 import aiohttp
 import asyncio
 import json
@@ -177,21 +178,24 @@ class UniswapSubgraphService:
             await self.update_token_info(token.id)
             await self.update_price_data(token.id)
 
-        """
-            This function was refactored a couple times in an attempt to make it more efficient.
-            The original implementation was to fetch all tokens from the subgraph, 
-            insert each token into the database, and then query each inserted token record,
-            get the token id, and then fetch/insert historical price data. One refactor was to
-            bulk insert all tokens, save their generated ids, map the token address to this id,
-            and then use the postgres record id for the price updating. Further optimization
-            could be explored, but inserted the price data does not seem to be the goal of the
-            exercise, but to serve price data for charting UIs.
-        """
+    """
+        This function was refactored a couple times in an attempt to make it more efficient.
+        The original implementation was to fetch all tokens from the subgraph, 
+        insert each token into the database, and then query each inserted token record,
+        get the token id, and then fetch/insert historical price data. One refactor was to
+        bulk insert all tokens, save their generated ids, map the token address to this id,
+        and then use the postgres record id for the price updating. Further optimization
+        could be explored, but inserted the price data does not seem to be the goal of the
+        exercise, but to serve price data for charting UIs.
+    """
     async def fetch_and_store_data(self, address_array):
+        logging.info("Fetching and storing data for tokens: %s", address_array)
         # Fetch token info from subgraph
         subgraph_tokens = await self.fetch_tokens(address_array)
+        logging.info("Fetched token data: %s", subgraph_tokens)
         # Prepare token data for bulk insersion
         formatted_tokens = [self.format_token_data(token, token['id']) for token in subgraph_tokens]
+        logging.info("Formatted token data: %s", formatted_tokens)
         # Execute bulk insert and save generated ids
         insert_stmt = pg_insert(Token).values(formatted_tokens)
         # Upsert on conflict if token address already exists
