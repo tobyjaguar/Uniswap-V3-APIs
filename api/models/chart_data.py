@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Numeric, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Numeric, DateTime, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import relationship
 from services.database import Base
 
@@ -23,6 +23,10 @@ class PriceData(Base):
     high = Column(Numeric(78, 18), nullable=False)
     low = Column(Numeric(78, 18), nullable=False)
     price_usd = Column(Numeric(78, 18), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint('token_id', 'timestamp', name='uix_token_timestamp'),
+    )
 
     # relationship with tokens for the index
     token = relationship("Token", back_populates="price_data")

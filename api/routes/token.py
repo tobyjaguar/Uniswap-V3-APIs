@@ -38,6 +38,40 @@ async def read_tokens(db: AsyncSession = Depends(get_db)):
     tokens = result.scalars().all()
     return [{"symbol": token.symbol, "name": token.name, "address": token.address} for token in tokens]
     
+    """
+    Retrieve chart data for a specific token over a given time period.
+
+    This function fetches price data for a token, aggregates it into specified time intervals,
+    and formats it for chart display. It handles missing data points by using the last known
+    values.
+
+    Parameters:
+        symbol (str): The symbol of the token to retrieve data for.
+        hours (int): The number of hours of historical data to retrieve.
+        interval_hours (int, optional): The interval in hours for data aggregation. Defaults to 1.
+        db (AsyncSession): The database session, provided by FastAPI's dependency injection.
+
+    Raises:
+        HTTPException: 
+            - 404 status code if the specified token is not found.
+            - 500 status code if there's an error executing the database query.
+            - 422 status code if the input parameters are invalid.
+
+    Returns:
+        List[List[List[Union[str, float, None]]]]: A list of 5 sublists, each containing data for
+        open, close, high, low, and priceUSD respectively. Each data point is a list of
+        [timestamp, data_type, value].
+
+    Example:
+        >>> get_chart_data("BTC", 24, 1)
+        [
+            [["2023-01-01T00:00:00", "open", 50000.0], ...],
+            [["2023-01-01T00:00:00", "close", 51000.0], ...],
+            [["2023-01-01T00:00:00", "high", 52000.0], ...],
+            [["2023-01-01T00:00:00", "low", 49000.0], ...],
+            [["2023-01-01T00:00:00", "priceUSD", 50500.0], ...]
+        ]
+    """
 @router.get("/chart-data/{symbol}")
 async def get_chart_data(symbol: str, hours: int, interval_hours: int = 1, db: AsyncSession = Depends(get_db)):
     # Get the token record by symbol

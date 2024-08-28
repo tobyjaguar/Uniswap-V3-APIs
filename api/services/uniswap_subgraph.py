@@ -56,6 +56,7 @@ class UniswapSubgraphService:
                 return data['data']['tokens']
             
     async def fetch_price_data(self, token_address, start_timestamp):
+        logging.debug("Fetching price data for token %s starting from %s", token_address, start_timestamp)
         query = """
         {
             tokenHourDatas(
@@ -73,7 +74,7 @@ class UniswapSubgraphService:
             }
         }
         """ % (token_address, start_timestamp)
-
+        
         async with aiohttp.ClientSession() as session:
             async with session.post(self.api_url, json={'query': query}) as response:
                 data = await response.json()
@@ -125,6 +126,7 @@ class UniswapSubgraphService:
         return token.id
     
     async def update_price_data(self, token_id):
+        logging.debug("Updating price data for token %s", token_id)
         # Get the latest timestamp in our database
         latest_price_data = await self.db_session.execute(
             select(PriceData).
@@ -133,19 +135,22 @@ class UniswapSubgraphService:
             limit(1)
         )
         latest_price_data = latest_price_data.scalar_one_or_none()
-
+        logging.debug("Latest price data: %s", latest_price_data)
+        
         if latest_price_data:
             start_timestamp = int(latest_price_data.timestamp.timestamp())
         else:
             # If no data, fetch last 10 days
             start_timestamp = int((datetime.now() - timedelta(days=10)).timestamp())
 
-        price_data = await self.fetch_price_data(token_id, start_timestamp)
+        token_address = await self.db_session.execute(select(Token).filter_by(id=token_id))
+        token_address = token_address.scalar_one_or_none().address
+        price_data = await self.fetch_price_data(token_address, start_timestamp)
 
         for data in price_data:
             timestamp = datetime.fromtimestamp(data['periodStartUnix'])
             await self.db_session.execute(
-                insert(PriceData).
+                pg_insert(PriceData).
                 values(
                     token_id=token_id,
                     timestamp=timestamp,
@@ -189,13 +194,14 @@ class UniswapSubgraphService:
         exercise, but to serve price data for charting UIs.
     """
     async def fetch_and_store_data(self, address_array):
-        logging.info("Fetching and storing data for tokens: %s", address_array)
+        logging.info("<::::::::::::::::> Fetch and Store Data <::::::::::::::::>")
+        logging.debug("Fetching and storing data for tokens: %s", address_array)
         # Fetch token info from subgraph
         subgraph_tokens = await self.fetch_tokens(address_array)
-        logging.info("Fetched token data: %s", subgraph_tokens)
+        logging.debug("Fetched token data: %s", subgraph_tokens)
         # Prepare token data for bulk insersion
         formatted_tokens = [self.format_token_data(token, token['id']) for token in subgraph_tokens]
-        logging.info("Formatted token data: %s", formatted_tokens)
+        logging.debug("Formatted token data: %s", formatted_tokens)
         # Execute bulk insert and save generated ids
         insert_stmt = pg_insert(Token).values(formatted_tokens)
         # Upsert on conflict if token address already exists
@@ -228,7 +234,8 @@ class UniswapSubgraphService:
         for token in tokens:
             await self.update_price_data(token.id)
 
-    async def start_polling(self, interval_seconds=30):
+    async def start_polling(self, interval_seconds=300):
+        logging.info("Starting polling with interval %s seconds", interval_seconds)
         while True:
             await self.update_chart_data()
             await asyncio.sleep(interval_seconds)

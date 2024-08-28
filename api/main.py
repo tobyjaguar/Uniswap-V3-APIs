@@ -7,7 +7,6 @@ from services.database import close_db
 from routes import token
 from scripts.reset_db import reset_database
 
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup within reset_db.py
