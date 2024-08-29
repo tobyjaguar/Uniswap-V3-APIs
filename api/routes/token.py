@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from models.token import Token
 from models.chart_data import PriceData
 from services.database import get_db
-
+from utils.format_prices import format_float
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -43,6 +43,7 @@ async def read_tokens(db: AsyncSession = Depends(get_db)):
         {"symbol": token.symbol, "name": token.name, "address": token.address}
         for token in tokens
     ]
+
 
     """
     Retrieve chart data for a specific token over a given time period.
@@ -80,8 +81,6 @@ async def read_tokens(db: AsyncSession = Depends(get_db)):
             [["2023-01-01T00:00:00", "priceUSD", 50500.0], ...]
         ]
     """
-
-
 @router.get("/chart-data/{symbol}")
 async def get_chart_data(
     symbol: str,
@@ -155,12 +154,7 @@ async def get_chart_data(
 
     # Structure the data with the specified interval
     # 5 lists for open, close, high, low, priceUSD
-    data = [[] for _ in range(5)]  
-
-    # I hate declaring functions inside functions
-    # But this might be better than decalring it outside the function
-    def format_float(value):
-        return round(float(value), 1) if value is not None else None
+    data = [[] for _ in range(5)]
 
     for entry in price_data:
         # Return timestamp without UTC designation
