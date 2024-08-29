@@ -44,10 +44,6 @@ Build the containers:
 
 `docker compose build`
 
-To run the test suite:
-
-`docker compose run test`
-
 To run the API service:
 
 `docker compose up`
@@ -63,6 +59,12 @@ Stop the server:
 then:
 
 `docker compose down`
+
+To run the test suite:
+
+`docker compose run test`
+
+*Note: the tests are run against the seeded database, therefore the api service will need to run before the test service is initially run. Running the test service on newly built containers will fail the tests as the data used is not mocked, but from the data ingested from the uniswap subgraph.*
 
 The application is structured as two docker containers managed with `docker compose`, the first container is the api service, and the other container is a vanilla instance of Postgres15. There is also a test service declared in the docker-compose.yml file to run the pytest unit tests without running uvicorn.
 
