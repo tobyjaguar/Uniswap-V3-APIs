@@ -40,15 +40,15 @@ The response object from the API endpoint is structured as a 3D array with the f
 
 *TL;DR*
 
+Build the containers:
+
+`docker compose build`
+
 To run the test suite:
 
 `docker compose run test`
 
 To run the API service:
-
-`docker compose build`
-
-then:
 
 `docker compose up`
 
@@ -218,7 +218,7 @@ Finally the select statement joins the continuous time series with the aggregate
 * COALESCE returns the first non-null value in its arguments.
 * LAG accesses data from a previous row in the ordered set.
 
-So, if there's no data for a particular timestamp, it uses the close price from the previous timestamp. This ensures a continuous data series without gaps.
+So, if there's no data for a particular timestamp, it uses the close price from the previous timestamp. This ensures a continuous data series without gaps. The query is also resilient to null data in the event that the close price is null, the extrapolated data is also then null.
 
 ### Commands
 
@@ -237,3 +237,15 @@ Docker Compose:
 `docker compose up`
 
 `docker compose down`
+
+### Notes
+
+Resources for the development: 
+
+https://fastapi.tiangolo.com/advanced/async-tests/
+
+https://github.com/pytest-dev/pytest-asyncio/issues/207
+
+https://rogulski.it/blog/sqlalchemy-14-async-orm-with-fastapi/
+
+https://github.com/Diapolo10/5G00EV25-3001_server/blob/main/tests/conftest.py

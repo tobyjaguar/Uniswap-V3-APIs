@@ -4,11 +4,11 @@ from services.database import Base
 
 
 class Token(Base):
-    __tablename__ = 'tokens'
+    __tablename__ = "tokens"
 
     id = Column(Integer, primary_key=True, index=True)
     address = Column(String(42), unique=True, index=True, nullable=False)
-    symbol = Column(String(10), unique=True, index=True, nullable=False)    
+    symbol = Column(String(10), unique=True, index=True, nullable=False)
     name = Column(String(100), nullable=False)
     decimals = Column(Integer, nullable=False)
     total_supply = Column(String)

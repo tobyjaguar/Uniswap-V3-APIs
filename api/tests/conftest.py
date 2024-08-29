@@ -2,6 +2,7 @@ import pytest
 import asyncio
 from typing import Generator
 
+
 # Magic encantation to solve the issue with the event loop
 @pytest.fixture(scope="session")
 def event_loop() -> Generator:
