@@ -1,0 +1,102 @@
+import pytest
+from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
+from unittest.mock import AsyncMock, MagicMock, patch
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+
+from main import app
+from models.token import Token
+from routes.token import get_chart_data
+from services.database import get_db
+
+# Override the get_db dependency
+async def override_get_db():
+    return AsyncMock(spec=AsyncSession)
+
+app.dependency_overrides[get_db] = override_get_db
+
+@pytest.mark.asyncio
+async def test_get_chart_data():
+    print("\n--- Starting test_get_chart_data ---")
+    
+    # Mock token
+    mock_token = MagicMock(spec=Token)
+    mock_token.id = 1
+    mock_token.symbol = "WBTC"
+    print(f"Mock token: {mock_token.symbol}, ID: {mock_token.id}")
+
+    # Mock price data
+    mock_price_data = [
+        MagicMock(
+            interval_timestamp=datetime.now(ZoneInfo("UTC")) - timedelta(hours=i),
+            open=100.0 + i,
+            close=101.0 + i,
+            high=102.0 + i,
+            low=99.0 + i,
+            price_usd=100.5 + i
+        ) for i in range(24)
+    ]
+    print(f"Mock price data length: {len(mock_price_data)}")
+    print(f"First mock price data point: {mock_price_data[0].__dict__}")
+
+    # Mock database queries
+    mock_execute = AsyncMock()
+    mock_execute.side_effect = lambda *args, **kwargs: AsyncMock(
+        scalar_one_or_none=AsyncMock(return_value=mock_token),
+        fetchall=AsyncMock(return_value=mock_price_data)
+    )
+
+    hours = 24
+    interval_hours = 1
+
+    print(f"Requesting data for {hours} hours with {interval_hours} hour interval")
+    url = f"/api/chart-data/{mock_token.symbol}?hours={hours}&interval_hours={interval_hours}"
+    print(f"URL: {url}")
+
+    async with AsyncClient(app=app, base_url="http://test") as ac:
+        with patch('routes.token.select', MagicMock()):
+            with patch('routes.token.text', MagicMock()):
+                with patch.object(AsyncSession, 'execute', mock_execute):
+                    response = await ac.get(url)
+    
+    print(f"Mock execute called {mock_execute.call_count} times")
+    for i, call in enumerate(mock_execute.call_args_list):
+        print(f"Call {i + 1} args: {call.args}")
+        print(f"Call {i + 1} kwargs: {call.kwargs}")
+    
+    print(f"Response status code: {response.status_code}")
+    print(f"Response headers: {response.headers}")
+    print(f"Raw response content: {response.content}")
+
+    assert response.status_code == 200, f"Unexpected status code: {response.status_code}"
+    
+    try:
+        data = response.json()
+        print(f"Parsed JSON data: {data}")
+    except Exception as e:
+        print(f"Failed to parse JSON: {e}")
+        print(f"Response text: {response.text}")
+        raise
+
+    assert len(data) == 5, f"Expected 5 data types, got {len(data)}"
+
+    data_point_counts = [len(data_type) for data_type in data]
+    print(f"\nData point counts: {data_point_counts}")
+    print(f"Time range requested: {hours} hours")
+    print(f"Interval: {interval_hours} hour(s)")
+
+    assert len(set(data_point_counts)) == 1, f"Inconsistent number of data points across types: {data_point_counts}"
+
+    expected_points = hours // interval_hours + 1
+    actual_points = data_point_counts[0]
+
+    print(f"Expected number of points: {expected_points}")
+    print(f"Actual number of points: {actual_points}")
+
+    assert abs(expected_points - actual_points) <= 1, f"Number of data points ({actual_points}) significantly differs from expected ({expected_points})"
+
+    print("--- Test completed ---")
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-s", "-v"])

@@ -1,0 +1,67 @@
+# from fastapi.testclient import TestClient
+import pytest
+from httpx import AsyncClient, ASGITransport
+import nest_asyncio
+
+from main import app
+nest_asyncio.apply()
+
+# client = TestClient(app)
+
+@pytest.fixture(scope="session")
+def event_loop() -> Generator:
+    loop = asyncio.get_event_loop_policy().new_event_loop()
+    yield loop
+    loop.close()
+
+pytestmark = pytest.mark.asyncio
+
+# def test_read_main():
+#     response = client.get("/")
+#     assert response.status_code == 200
+#     assert response.json() == {"message": "Welcome to Uniswap V3 Data API"}
+
+async def test_read_main():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac: 
+        response = await ac.get("/")
+    assert response.status_code == 200
+    assert response.json() == {"message": "Welcome to Uniswap V3 Data API"}
+
+async def test_read_tokens():
+    expected_tokens = [
+        {
+            "symbol": "WBTC",
+            "name": "Wrapped BTC",
+            "address": "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599"
+        },
+        {
+            "symbol": "GNO",
+            "name": "Gnosis Token",
+            "address": "0x6810e776880c02933d47db1b9fc05908e5386b96"
+        },
+        {
+            "symbol": "SHIB",
+            "name": "SHIBA INU",
+            "address": "0x95ad61b0a150d79219dcf64e1e6cc01f0b64c4ce"
+        }
+    ]
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac: 
+        response = await ac.get("/api/tokens")
+    respJSON = response.json()
+    assert response.status_code == 200
+    assert len(respJSON) == 3
+    assert respJSON == expected_tokens
+
+@pytest.mark.asyncio        
+async def test_chart_data():
+    token_symbol = "WBTC"
+    hours = 24
+    interval_hours = 1
+    url = f'/api/chart-data/{token_symbol}?hours={hours}&interval_hours={interval_hours}'
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac: 
+        response = await ac.get(url)
+    respJSON = response.json()
+    assert response.status_code == 200
+    assert len(respJSON) == 5 # 5 lists for open, close, high, low, priceUSD
+    assert all(len(data_type) == 24 for data_type in respJSON)  # 24 data points for each type
+    assert all(isinstance(point[0], str) and isinstance(point[2], float) for data_type in respJSON for point in data_type)

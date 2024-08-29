@@ -35,6 +35,21 @@ services:
     networks:
       - app-network
 
+  test:
+    build: 
+      context: .
+      dockerfile: api/Dockerfile.test
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://user:password@db:5432/uniswap_data
+    command: pytest
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - app-network
+
 volumes:
   postgres_data:
 

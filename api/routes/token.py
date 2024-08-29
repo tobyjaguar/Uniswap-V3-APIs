@@ -135,13 +135,18 @@ async def get_chart_data(symbol: str, hours: int, interval_hours: int = 1, db: A
 
     # Structure the data with the specified interval
     data = [[] for _ in range(5)]  # 5 lists for open, close, high, low, priceUSD
+    # I hate declaring functions inside functions
+    # But this might be better than decalring it outside the function
+    def format_float(value):
+        return round(float(value), 1) if value is not None else None
     for entry in price_data:
-        timestamp = entry.interval_timestamp.isoformat()
-        data[0].append([timestamp, "open", float(entry.open) if entry.open is not None else None])
-        data[1].append([timestamp, "close", float(entry.close) if entry.close is not None else None])
-        data[2].append([timestamp, "high", float(entry.high) if entry.high is not None else None])
-        data[3].append([timestamp, "low", float(entry.low) if entry.low is not None else None])
-        data[4].append([timestamp, "priceUSD", float(entry.price_usd) if entry.price_usd is not None else None])
+        # Return timestamp without UTC designation
+        timestamp = entry.interval_timestamp.replace(tzinfo=None).isoformat()
+        data[0].append([timestamp, "open", format_float(entry.open)])
+        data[1].append([timestamp, "close", format_float(entry.close)])
+        data[2].append([timestamp, "high", format_float(entry.high)])
+        data[3].append([timestamp, "low", format_float(entry.low)])
+        data[4].append([timestamp, "priceUSD", format_float(entry.price_usd)])
 
     return data
 
@@ -217,7 +222,7 @@ async def get_all_chart_data(
         # Get the token record by symbol, including the associated price data
         query = select(Token).options(joinedload(Token.price_data)).filter(Token.symbol == symbol)
         result = await db.execute(query)
-        token = result.unique().scalar_one_or_none()
+        token = await result.unique().scalar_one_or_none()
 
         if not token:
             logger.warning(f"Token not found for symbol: {symbol}")
@@ -267,7 +272,7 @@ async def debug_price_data(
         # First, get the token
         token_query = select(Token).filter(Token.symbol == symbol)
         token_result = await db.execute(token_query)
-        token = token_result.scalar_one_or_none()
+        token = await token_result.scalar_one_or_none()
 
         if not token:
             return {"error": "Token not found"}
@@ -275,7 +280,7 @@ async def debug_price_data(
         # Now, query for price data
         price_data_query = select(PriceData).filter(PriceData.token_id == token.id).order_by(PriceData.timestamp.desc()).limit(limit)
         price_data_result = await db.execute(price_data_query)
-        price_data = price_data_result.scalars().all()
+        price_data = await price_data_result.scalars().all()
 
         return {
             "token": {
