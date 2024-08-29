@@ -126,7 +126,99 @@ For a detailed overview of the project, I will start with a couple of prelimiary
 * Flask vs FastAPI
 * Aysnc vs Sync
 
-In thinking about how to begin the project I considered typescript, as the name of desired function of the task is camelCase, however, I went with python because I had the recollection that python was the target language for the company's backend. 
+In thinking about how to begin the project I considered typescript, as the name of desired function of the task is camelCase, however, I went with python because I had the recollection that python was the target language for the company's backend (if I'm not mistaken). As for the decision to use docker compose, I used docker compose for a rather complex project back in school, and I just default to using it if there is more than one container. Being that there are two, it was a bit of a wash, but I went with container coordination to simulate a hosted database.
+
+For the decision to use FastAPI, I went with it because it was a technology I hadn't used before, where Flask I had. And used this project as a learning opportunity to try out FastAPI, and because it is fast, or so the name would suggest.
+
+Lastly, I went with an asynchronous approach to the API server in part due to the fact that I would program an Express server that way, and also that is where the rabbit hole lead when trying to debug the chart data endpoint. The async approach made the testing much more difficult, and in retrospect I would try to keep the server sychronous if at all possible.
+
+The application is declared in the main.py file. Most of the server code is boiler plate, which has a similar structure to an Express server, load the models, routes, and middleware onto the application server and then start it on a port. A departure in this application was splitting the server initialization across a reset module and the main application module. The application is broken up among folders to help with architectural design, readability, and separation of concerns.
+
+Within the root folder exists the docker-compose file, the pytest initialization file, this readme, and the requirements file for the python packages. The requirements file is at the root level which is where the python virtual environment is installed, where the requirements file is copied into the container working directory, detailed in the Dockerfile. 
+
+There are two subfolders for the database and the api application. The database directory is rather sparse with only the SQL initialization script for creating the tables in the database. Everything else lives in the api directory. This directory has the models, scripts, services, and tests folders. All contain the files that one would expect given their naming.
+
+To model the data, there is a relationship between the two tables within the database, tokens, and price_data. The connection between these tables is the token id, or the primary key for tokens on the token table, which serves as a foreign key on the price_data table. This decision was made to optimize the query of price data given a token symbol. However, in the fog of war the api router endpoint does two queries, one for the token id from the token symbol, and another big-ole-mammajamma to query the price data:
+
+```python
+result = await db.execute(query, {
+        'start_time': start_time,
+        'end_time': end_time,
+        'interval': interval_hours,
+        'token_id': token.id
+    })
+    price_data = result.fetchall()
+```
+
+I believe having these two asynchronous calls within the `chart-data` endpoint necessitated the asynch api server, which was an addtional complexity to the project. The intention and initial data modeling design was to join the tables on the token symbol to retrieve the price data, which ultimately didn't happen due to the complexity of the querying the price data and time considerations. 
+
+**This is most likely the most illuminating lesson of the project, efficient data modeling for query performance.** 
+
+As stated above, most of the code is boiler plate for the api server, and the finer detail of this task is likely within the query for the `getChartdata(tokenSymbol, timeUnitInHours)` response data. The following is my description of that query and some caveats.
+
+### The Query
+
+```SQL
+WITH time_series AS (
+        SELECT generate_series(:start_time, :end_time, :interval * '1 hour'::interval) AS interval_timestamp
+    ),
+    price_data_hourly AS (
+        SELECT
+            date_trunc('hour', timestamp) AS hour,
+            open,
+            close,
+            high,
+            low,
+            price_usd,
+            ROW_NUMBER() OVER (PARTITION BY date_trunc('hour', timestamp) ORDER BY timestamp ASC) AS rn_first,
+            ROW_NUMBER() OVER (PARTITION BY date_trunc('hour', timestamp) ORDER BY timestamp DESC) AS rn_last
+        FROM price_data
+        WHERE token_id = :token_id AND timestamp >= :start_time AND timestamp <= :end_time
+    ),
+    price_data_agg AS (
+        SELECT
+            hour,
+            MAX(CASE WHEN rn_first = 1 THEN open END) AS open,
+            MAX(CASE WHEN rn_last = 1 THEN close END) AS close,
+            MAX(high) AS high,
+            MIN(low) AS low,
+            MAX(CASE WHEN rn_last = 1 THEN price_usd END) AS price_usd
+        FROM price_data_hourly
+        GROUP BY hour
+    )
+    SELECT
+        time_series.interval_timestamp,
+        COALESCE(price_data_agg.open, LAG(price_data_agg.close) OVER (ORDER BY time_series.interval_timestamp)) AS open,
+        COALESCE(price_data_agg.close, LAG(price_data_agg.close) OVER (ORDER BY time_series.interval_timestamp)) AS close,
+        COALESCE(price_data_agg.high, LAG(price_data_agg.close) OVER (ORDER BY time_series.interval_timestamp)) AS high,
+        COALESCE(price_data_agg.low, LAG(price_data_agg.close) OVER (ORDER BY time_series.interval_timestamp)) AS low,
+        COALESCE(price_data_agg.price_usd, LAG(price_data_agg.price_usd) OVER (ORDER BY time_series.interval_timestamp)) AS price_usd
+    FROM time_series
+    LEFT JOIN price_data_agg ON time_series.interval_timestamp = price_data_agg.hour
+    ORDER BY time_series.interval_timestamp
+```
+
+A starting note is that the api for this data is called `chart-data` while the function that executes the api request is called `get_chart_data(symbol, hours, interval)`. The discrepancies are due to decisions made during the programming assignment. The snake case naming is due to the python convention, and the decision to add the hour time frame was a design decision to play with more data from the Uniswap subgraph. The route is declared as:
+
+```python
+@router.get("/chart-data/{symbol}")
+async def get_chart_data(symbol: str, hours: int, interval_hours: int = 1, db: AsyncSession = Depends(get_db)):
+```
+
+Breaking down the query, we begin with the common table expression to manage the multiple temporary tables created for the query to help separate the elements to make up the query. There are three CTEs in this query, the *time_series*, *price_data_hourly*, and *price_data_agg*.
+
+The Time Series CTE creates a series of timestamps from :start_time to :end_time at intervals of :interval hours. It ensures we have a continuous series of timestamps, even if there's no data for some intervals.
+
+The Price Data Hourly CTE creates the price data for the specified token and time range. It uses window functions (ROW_NUMBER()) to identify the first and last rows for each hour. This is crucial for correctly determining the open and close prices for each hour.
+
+The Price Data Agg CTE aggregates the hourly data. It selects the open price from the first row of each hour, the close price from the last row, the highest high, the lowest low, and the last price_usd for each hour.
+
+Finally the select statement joins the continuous time series with the aggregated price data. The COALESCE and LAG functions are used to fill in missing data where
+
+* COALESCE returns the first non-null value in its arguments.
+* LAG accesses data from a previous row in the ordered set.
+
+So, if there's no data for a particular timestamp, it uses the close price from the previous timestamp. This ensures a continuous data series without gaps.
 
 ### Commands
 
